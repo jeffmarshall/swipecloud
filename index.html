@@ -1,24 +1,179 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" ng-app="SwipeCloud">
 <head>
   <meta charset="UTF-8">
   <title></title>
+  <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+  <!-- Latest compiled and minified CSS -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+  <!-- Latest compiled and minified JavaScript -->
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+
+  <style>
+    @media (min-width: 768px){
+      .sidebar {
+        position: fixed;
+        top: 51px;
+        bottom: 0;
+        left: 0;
+        z-index: 1000;
+        display: block;
+        padding: 20px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        background-color: #F5F5F5;
+        border-right: 1px solid #EEE;
+      }
+    }
+  </style>
+
 </head>
 <body>
+
+  <nav class="navbar navbar-inverse navbar-fixed-top">
+    <div class="container-fluid">
+      <div class="navbar-header">
+        <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+          <span class="sr-only">Toggle navigation</span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href="#">SwipeCloud</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-sm-3 col-md-2 sidebar">
+        <ul class="nav nav-sidebar">
+          <li class="active"><a href="#">Inbox</a></li>
+        </ul>
+      </div>
+
+      <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main" style="margin-top: 51px">
+        <h1 class="page-header">New Sounds</h1>
+        <div class="table-responsive" ng-controller="InboxController as inbox">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>&nbsp;</th>
+                <th>Title</th>
+                <th>User</th>
+                <th>&nbsp;</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr ng-repeat="track in inbox.tracks" ng-if="!track.isArchived">
+                <td>
+                  <div class="btn-group">
+                    <button class="btn btn-link btn-xs" ng-click="inbox.playTrack(track)">
+                      <span class="glyphicon glyphicon-play"></span>
+                    </button>
+                  </div>
+                </td>
+                <td>{{ track.title }}</td>
+                <td>{{ track.user.username }}</td>
+                <td>
+                  <div class="btn-group">
+                    <button class="btn btn-link btn-xs" ng-click="inbox.archiveTrack(track)">
+                      <span class="glyphicon glyphicon-remove"></span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.4.3/angular.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.8.3/underscore-min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/async/1.3.0/async.min.js"></script>
   <script src="http://connect.soundcloud.com/sdk-2.0.0.js"></script>
   <script>
-  // initialize client with app credentials
-  SC.initialize({
-    client_id: 'f22f57d5f6cd65291ae5904ff81146ba',
-    redirect_uri: 'http://jeffmarshall.github.io/swipecloud'
-  });
+    angular.module('SwipeCloud', [])
+    .controller('InboxController', function($interval){
+      var inbox = this;
+      inbox.tracks = [];
 
-  // initiate auth popup
-  SC.connect(function() {
-    SC.get('/me', function(me) {
-      alert('Hello, ' + me.username);
-    });
-  });
+      // initialize client with app credentials
+      var init = SC.initialize({
+        client_id: 'f22f57d5f6cd65291ae5904ff81146ba',
+        // redirect_uri: 'http://jeffmarshall.github.io/swipecloud'
+        redirect_uri: 'http://localhost:8080/callback.html'
+      });
+
+      // initiate auth popup
+      SC.connect(function() {
+        init._connectWindow.close();
+        SC.get('/me', function(me) {
+          var userId = me.id;
+
+          SC.get('/users/'+ userId +'/followings', {limit: 200}, function(followings){
+
+            async.map(followings, function(following, async_callback){
+              SC.get('/users/'+ following.id +'/tracks', {limit: 10}, function(tracks){
+                async_callback(null, tracks);
+              })
+            }, function(error, result){
+              if (error) return console.log('error', error);
+
+              var tracks = _.flatten(result).filter(function(track){
+                var archivedTrackIds = window.localStorage.getItem('archivedTrackIds') || [];
+
+                return archivedTrackIds.indexOf(track.id) == -1;
+              });
+
+              function compare(a,b) {
+                if (a.created_at < b.created_at)
+                  return 1;
+                if (a.created_at > b.created_at)
+                  return -1;
+                return 0;
+              }
+
+              tracks = tracks.sort(compare);
+              console.log(tracks)
+
+              $interval(function(){
+                inbox.tracks = tracks;
+              })
+            })
+          })
+        });
+      });
+
+      inbox.playTrack = function(track){
+        console.log(track)
+        // stream track id 293
+        SC.stream("/tracks/"+ track.id, function(sound){
+          sound.play();
+
+          $interval(function(){
+            track.isPlaying = true;
+          })
+        });
+      }
+
+      inbox.stopTrack = function(track){
+        
+      }
+
+      inbox.archiveTrack = function(track){
+        var archivedTrackIds = window.localStorage.getItem('archivedTrackIds') || [];
+        archivedTrackIds.push(track.id);
+        window.localStorage.setItem('archivedTrackIds', archivedTrackIds);
+
+        $interval(function(){
+          track.isArchived = true;
+        })
+      }
+    })
   </script>
 </body>
 </html>
