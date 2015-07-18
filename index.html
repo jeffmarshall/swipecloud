@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title></title>
+</head>
+<body>
+  <script src="http://connect.soundcloud.com/sdk-2.0.0.js"></script>
+  <script>
+  // initialize client with app credentials
+  SC.initialize({
+    client_id: 'f22f57d5f6cd65291ae5904ff81146ba',
+    redirect_uri: 'http://jeffmarshall.github.io/swipecloud'
+  });
+
+  // initiate auth popup
+  SC.connect(function() {
+    SC.get('/me', function(me) {
+      alert('Hello, ' + me.username);
+    });
+  });
+  </script>
+</body>
+</html>
